@@ -1,0 +1,22 @@
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+*.xcuserstate
+*.xcuserdatad
+
+# Config files with sensitive data
+guidedcamera/Config.plist
+
+# Build
+build/
+DerivedData/
+
+# Swift Package Manager
+.swiftpm/
+
+# macOS
+.DS_Store
+

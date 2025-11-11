@@ -1,0 +1,29 @@
+workflow: Vehicle Accident Report
+steps:
+  - id: accident_scene_wide
+    instruction: "Take a wide shot of the entire accident scene from a safe distance, showing all vehicles and surroundings."
+    capture: photo
+    must_have: ["car", "vehicle"]
+    overlays: ["grid", "horizon"]
+  - id: vehicle_damage_front
+    instruction: "Capture close-up photos of damage to the front of the vehicle."
+    capture: photo
+    overlays: ["grid"]
+  - id: vehicle_damage_rear
+    instruction: "Capture close-up photos of damage to the rear of the vehicle."
+    capture: photo
+    overlays: ["grid"]
+  - id: vehicle_damage_side
+    instruction: "Take photos of any side damage on both sides of the vehicle."
+    capture: photo
+    overlays: ["grid"]
+  - id: license_plates
+    instruction: "Photograph the license plates of all vehicles involved, ensuring they are clearly readable."
+    capture: photo
+    require_text: true
+    overlays: ["grid"]
+  - id: road_conditions
+    instruction: "Document road conditions, including any skid marks, debris, or road hazards."
+    capture: photo
+    overlays: ["grid"]
+

@@ -1,0 +1,28 @@
+workflow: Contractor Daily Update
+steps:
+  - id: site_overview
+    instruction: "Take a wide shot of the entire job site showing overall progress."
+    capture: photo
+    must_have: ["construction", "building"]
+    overlays: ["grid", "horizon"]
+  - id: work_area_today
+    instruction: "Document the specific area where work was performed today."
+    capture: photo
+    overlays: ["grid"]
+  - id: materials_delivered
+    instruction: "Photograph any materials that were delivered or are ready for use."
+    capture: photo
+    overlays: ["grid"]
+  - id: completed_work
+    instruction: "Take detailed photos of work that was completed during this shift."
+    capture: photo
+    overlays: ["grid"]
+  - id: issues_concerns
+    instruction: "Document any issues, concerns, or areas that need attention."
+    capture: photo
+    overlays: ["grid"]
+  - id: safety_check
+    instruction: "Capture photos showing safety measures in place and any safety concerns."
+    capture: photo
+    overlays: ["grid"]
+

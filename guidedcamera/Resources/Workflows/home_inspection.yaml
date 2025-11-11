@@ -1,0 +1,29 @@
+workflow: Home Inspection
+steps:
+  - id: exterior_wide
+    instruction: "Take a wide shot of the front of the house showing the full exterior."
+    capture: photo
+    must_have: ["house", "building"]
+    overlays: ["grid", "horizon"]
+  - id: front_door
+    instruction: "Capture a close-up photo of the front door, including any visible damage or features."
+    capture: photo
+    overlays: ["grid"]
+  - id: roof_inspection
+    instruction: "Take a photo of the roof from a safe distance, showing the overall condition."
+    capture: photo
+    must_have: ["roof", "house"]
+  - id: interior_entry
+    instruction: "Capture the entryway and main living area as you enter the home."
+    capture: photo
+    overlays: ["grid"]
+  - id: kitchen_overview
+    instruction: "Take a wide shot of the kitchen showing all appliances and fixtures."
+    capture: photo
+    must_have: ["kitchen"]
+    overlays: ["grid"]
+  - id: bathroom_check
+    instruction: "Photograph each bathroom, showing fixtures and any visible issues."
+    capture: photo
+    overlays: ["grid"]
+
