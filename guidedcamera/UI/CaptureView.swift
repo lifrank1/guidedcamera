@@ -110,9 +110,17 @@ struct CaptureView: View {
             }
         }
         .onAppear {
+            print("📷 [CaptureView] View appeared, setting up session...")
             setupSession()
+            
+            // Start camera session after a brief delay to ensure view is laid out
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                print("📷 [CaptureView] Starting camera session...")
+                captureManager.camera.startSession()
+            }
         }
         .onDisappear {
+            print("📷 [CaptureView] View disappeared, stopping camera session...")
             captureManager.camera.stopSession()
         }
     }

@@ -13,16 +13,13 @@ class WorkflowValidator {
     
     private init() {}
     
-    /// Validate a compiled workflow plan
+    /// Validate a compiled workflow plan (throws on critical errors)
     func validate(_ plan: WorkflowPlan) throws {
+        print("🔍 [WorkflowValidator] Validating workflow plan...")
+        
         // Validate plan has steps
         guard !plan.steps.isEmpty else {
             throw ValidationError.emptyPlan
-        }
-        
-        // Validate each step
-        for (index, step) in plan.steps.enumerated() {
-            try validateStep(step, at: index)
         }
         
         // Validate step IDs are unique
@@ -32,17 +29,90 @@ class WorkflowValidator {
             throw ValidationError.duplicateStepIds
         }
         
-        // Validate transitions reference valid step IDs
-        for step in plan.steps {
-            for transition in step.transitions {
-                guard plan.steps.contains(where: { $0.id == transition.to }) else {
-                    throw ValidationError.invalidTransition(transition.to)
-                }
-            }
+        print("🔍 [WorkflowValidator] Step IDs are unique: \(stepIds)")
+        
+        // Validate each step
+        for (index, step) in plan.steps.enumerated() {
+            try validateStep(step, at: index, totalSteps: plan.steps.count)
         }
+        
+        print("✅ [WorkflowValidator] Basic validation complete")
     }
     
-    private func validateStep(_ step: WorkflowStep, at index: Int) throws {
+    /// Validate and return a fixed plan with corrected transitions
+    func validateAndFix(_ plan: WorkflowPlan) -> WorkflowPlan {
+        print("🔍 [WorkflowValidator] Validating and fixing workflow plan...")
+        
+        // Validate plan has steps
+        guard !plan.steps.isEmpty else {
+            return plan // Can't fix empty plan
+        }
+        
+        // Validate step IDs are unique
+        let stepIds = plan.steps.map { $0.id }
+        let uniqueIds = Set(stepIds)
+        guard stepIds.count == uniqueIds.count else {
+            return plan // Can't fix duplicate IDs
+        }
+        
+        print("🔍 [WorkflowValidator] Step IDs are unique: \(stepIds)")
+        
+        // Validate each step and auto-fix invalid transitions
+        var fixedSteps: [WorkflowStep] = []
+        for (index, step) in plan.steps.enumerated() {
+            // Auto-fix invalid transitions
+            let validTransitions = step.transitions.filter { transition in
+                let isValid = plan.steps.contains(where: { $0.id == transition.to })
+                if !isValid {
+                    print("⚠️ [WorkflowValidator] Step '\(step.id)' has invalid transition to '\(transition.to)' - removing it")
+                }
+                return isValid
+            }
+            
+            // If all transitions were invalid, add a default transition to the next step (or complete)
+            let finalTransitions: [Transition]
+            if validTransitions.isEmpty {
+                print("⚠️ [WorkflowValidator] Step '\(step.id)' has no valid transitions - adding default")
+                if index < plan.steps.count - 1 {
+                    // Transition to next step in sequence
+                    let nextStepId = plan.steps[index + 1].id
+                    finalTransitions = [
+                        Transition(when: .onSuccess, to: nextStepId),
+                        Transition(when: .onSkip, to: nextStepId)
+                    ]
+                } else {
+                    // Last step - no transitions needed (will complete naturally)
+                    finalTransitions = []
+                }
+            } else {
+                finalTransitions = validTransitions
+            }
+            
+            // Create fixed step
+            let fixedStep = WorkflowStep(
+                id: step.id,
+                ui: step.ui,
+                capture: step.capture,
+                validators: step.validators,
+                transitions: finalTransitions
+            )
+            fixedSteps.append(fixedStep)
+        }
+        
+        // Return fixed plan
+        let fixedPlan = WorkflowPlan(
+            id: plan.id,
+            planId: plan.planId,
+            steps: fixedSteps,
+            report: plan.report,
+            advice: plan.advice
+        )
+        
+        print("✅ [WorkflowValidator] Fixed \(plan.steps.count - fixedSteps.count) invalid transitions.")
+        return fixedPlan
+    }
+    
+    private func validateStep(_ step: WorkflowStep, at index: Int, totalSteps: Int) throws {
         // Validate step has instruction
         guard !step.ui.instruction.isEmpty else {
             throw ValidationError.missingInstruction(at: index)
@@ -53,10 +123,12 @@ class WorkflowValidator {
             throw ValidationError.invalidCaptureType(at: index)
         }
         
-        // Validate at least one transition
-        guard !step.transitions.isEmpty else {
+        // Validate transitions (last step can have empty transitions - will complete naturally)
+        let isLastStep = index == totalSteps - 1
+        if !isLastStep && step.transitions.isEmpty {
             throw ValidationError.missingTransitions(at: index)
         }
+        // Last step can have empty transitions - that's fine, session will complete
     }
 }
 

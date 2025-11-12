@@ -18,42 +18,98 @@ class CameraController: NSObject, ObservableObject {
     private let videoOutput = AVCaptureMovieFileOutput()
     private var videoFileURL: URL?
     
+    // Preview layer is now managed by CameraPreviewUIView
+    // This property is kept for compatibility but preview should be accessed via the view
     var previewLayer: AVCaptureVideoPreviewLayer {
         let layer = AVCaptureVideoPreviewLayer(session: session)
         layer.videoGravity = .resizeAspectFill
         return layer
     }
     
+    var captureSession: AVCaptureSession {
+        return session
+    }
+    
     override init() {
         super.init()
-        setupSession()
+        checkPermissionsAndSetup()
+    }
+    
+    private func checkPermissionsAndSetup() {
+        // Check camera permission
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            setupSession()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        self?.setupSession()
+                    } else {
+                        self?.error = .setupFailed
+                    }
+                }
+            }
+        default:
+            error = .setupFailed
+        }
     }
     
     private func setupSession() {
+        print("📷 [CameraController] Setting up camera session...")
+        
         session.beginConfiguration()
         session.sessionPreset = .photo
         
+        // Remove existing inputs
+        for input in session.inputs {
+            session.removeInput(input)
+        }
+        
         // Add video input
-        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-              let videoInput = try? AVCaptureDeviceInput(device: videoDevice),
-              session.canAddInput(videoInput) else {
+        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            print("❌ [CameraController] No video device found")
             error = .setupFailed
             session.commitConfiguration()
             return
         }
-        session.addInput(videoInput)
+        
+        do {
+            let videoInput = try AVCaptureDeviceInput(device: videoDevice)
+            if session.canAddInput(videoInput) {
+                session.addInput(videoInput)
+                print("✅ [CameraController] Video input added")
+            } else {
+                print("❌ [CameraController] Cannot add video input")
+                error = .setupFailed
+                session.commitConfiguration()
+                return
+            }
+        } catch {
+            print("❌ [CameraController] Failed to create video input: \(error)")
+            self.error = .setupFailed
+            session.commitConfiguration()
+            return
+        }
         
         // Add photo output
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
+            print("✅ [CameraController] Photo output added")
+        } else {
+            print("⚠️ [CameraController] Cannot add photo output")
         }
         
         // Add video output
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
+            print("✅ [CameraController] Video output added")
+        } else {
+            print("⚠️ [CameraController] Cannot add video output")
         }
         
         session.commitConfiguration()
+        print("✅ [CameraController] Session configuration complete")
     }
     
     func startSession() {

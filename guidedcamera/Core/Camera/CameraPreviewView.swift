@@ -12,20 +12,48 @@ import AVFoundation
 struct CameraPreviewView: UIViewRepresentable {
     let cameraController: CameraController
     
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        let previewLayer = cameraController.previewLayer
-        
-        previewLayer.frame = view.bounds
-        view.layer.addSublayer(previewLayer)
-        
+    func makeUIView(context: Context) -> CameraPreviewUIView {
+        let view = CameraPreviewUIView()
+        view.setupPreviewLayer(with: cameraController)
         return view
     }
     
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let layer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
-            layer.frame = uiView.bounds
+    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
+        uiView.updateFrame()
+    }
+}
+
+/// UIView wrapper for AVCaptureVideoPreviewLayer
+class CameraPreviewUIView: UIView {
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var cameraController: CameraController?
+    
+    override class var layerClass: AnyClass {
+        return AVCaptureVideoPreviewLayer.self
+    }
+    
+    var videoPreviewLayer: AVCaptureVideoPreviewLayer {
+        return layer as! AVCaptureVideoPreviewLayer
+    }
+    
+    func setupPreviewLayer(with controller: CameraController) {
+        cameraController = controller
+        videoPreviewLayer.session = controller.captureSession
+        videoPreviewLayer.videoGravity = .resizeAspectFill
+        
+        // Ensure frame is set after layout
+        DispatchQueue.main.async { [weak self] in
+            self?.updateFrame()
         }
+    }
+    
+    func updateFrame() {
+        videoPreviewLayer.frame = bounds
+    }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateFrame()
     }
 }
 

@@ -16,7 +16,6 @@ struct WorkflowPlan: Codable, Identifiable {
     let advice: [String]?
     
     enum CodingKeys: String, CodingKey {
-        case id
         case planId = "plan_id"
         case steps
         case report
@@ -29,6 +28,18 @@ struct WorkflowPlan: Codable, Identifiable {
         self.steps = steps
         self.report = report
         self.advice = advice
+    }
+    
+    // Custom decoder to generate id from planId if not present
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        planId = try container.decode(String.self, forKey: .planId)
+        steps = try container.decode([WorkflowStep].self, forKey: .steps)
+        report = try container.decodeIfPresent(ReportTemplate.self, forKey: .report)
+        advice = try container.decodeIfPresent([String].self, forKey: .advice)
+        
+        // Generate id from planId (or use planId as id)
+        id = planId
     }
 }
 

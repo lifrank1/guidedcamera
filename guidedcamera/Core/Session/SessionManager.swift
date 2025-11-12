@@ -19,13 +19,30 @@ class SessionManager {
     
     /// Load and start a session with a bundled workflow
     func startSession(withBundledWorkflow name: String) async throws -> CaptureSession {
-        let yamlContent = try loader.loadBundledWorkflow(name)
-        let plan = try await compiler.compile(yamlContent)
+        print("🚀 [SessionManager] Starting session with bundled workflow: \(name)")
         
-        let session = CaptureSession()
-        session.start(with: plan)
-        
-        return session
+        do {
+            print("🚀 [SessionManager] Step 1: Loading YAML workflow...")
+            let yamlContent = try loader.loadBundledWorkflow(name)
+            print("✅ [SessionManager] YAML loaded successfully (\(yamlContent.count) characters)")
+            
+            print("🚀 [SessionManager] Step 2: Compiling workflow...")
+            let plan = try await compiler.compile(yamlContent)
+            print("✅ [SessionManager] Workflow compiled successfully")
+            print("✅ [SessionManager] Plan has \(plan.steps.count) steps")
+            
+            print("🚀 [SessionManager] Step 3: Creating session...")
+            let session = CaptureSession()
+            session.start(with: plan)
+            print("✅ [SessionManager] Session started successfully")
+            
+            return session
+        } catch {
+            print("❌ [SessionManager] Failed to start session: \(error)")
+            print("❌ [SessionManager] Error type: \(type(of: error))")
+            print("❌ [SessionManager] Error description: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     /// Load and start a session with a remote workflow
