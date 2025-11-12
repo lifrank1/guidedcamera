@@ -17,6 +17,8 @@ class CameraController: NSObject, ObservableObject {
     private let photoOutput = AVCapturePhotoOutput()
     private let videoOutput = AVCaptureMovieFileOutput()
     private var videoFileURL: URL?
+    // Retain photo capture delegates to prevent deallocation
+    private var activePhotoDelegates: [PhotoCaptureDelegate] = []
     
     // Preview layer is now managed by CameraPreviewUIView
     // This property is kept for compatibility but preview should be accessed via the view
@@ -135,8 +137,34 @@ class CameraController: NSObject, ObservableObject {
     }
     
     func capturePhoto(completion: @escaping (Result<UIImage, CameraError>) -> Void) {
+        print("📸 [CameraController] capturePhoto called")
+        print("📸 [CameraController] Session running: \(isSessionRunning)")
+        print("📸 [CameraController] Photo output connections: \(photoOutput.connections.count)")
+        
+        guard isSessionRunning else {
+            print("❌ [CameraController] Session not running, cannot capture")
+            completion(.failure(.setupFailed))
+            return
+        }
+        
+        guard !photoOutput.connections.isEmpty else {
+            print("❌ [CameraController] Photo output has no connections")
+            completion(.failure(.setupFailed))
+            return
+        }
+        
         let settings = AVCapturePhotoSettings()
-        photoOutput.capturePhoto(with: settings, delegate: PhotoCaptureDelegate(completion: completion))
+        print("📸 [CameraController] Creating photo settings and starting capture...")
+        let delegate = PhotoCaptureDelegate(completion: completion)
+        // Retain delegate to prevent deallocation before capture completes
+        activePhotoDelegates.append(delegate)
+        photoOutput.capturePhoto(with: settings, delegate: delegate)
+        print("📸 [CameraController] capturePhoto request sent to output")
+        
+        // Clean up delegate after a delay (delegate will be retained by photoOutput during capture)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            self?.activePhotoDelegates.removeAll { $0 === delegate }
+        }
     }
     
     func startVideoRecording() throws -> URL {
@@ -162,26 +190,47 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
     }
 }
 
-private class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     private let completion: (Result<UIImage, CameraError>) -> Void
     
     init(completion: @escaping (Result<UIImage, CameraError>) -> Void) {
         self.completion = completion
+        print("📸 [PhotoCaptureDelegate] Delegate created")
     }
     
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        print("📸 [PhotoCaptureDelegate] didFinishProcessingPhoto called")
+        
         if let error = error {
+            print("❌ [PhotoCaptureDelegate] Error processing photo: \(error)")
             completion(.failure(.captureFailed(error)))
             return
         }
         
-        guard let imageData = photo.fileDataRepresentation(),
-              let image = UIImage(data: imageData) else {
+        print("📸 [PhotoCaptureDelegate] Getting image data...")
+        guard let imageData = photo.fileDataRepresentation() else {
+            print("❌ [PhotoCaptureDelegate] No image data in photo")
             completion(.failure(.imageProcessingFailed))
             return
         }
         
+        print("📸 [PhotoCaptureDelegate] Image data size: \(imageData.count) bytes")
+        guard let image = UIImage(data: imageData) else {
+            print("❌ [PhotoCaptureDelegate] Failed to create UIImage from data")
+            completion(.failure(.imageProcessingFailed))
+            return
+        }
+        
+        print("✅ [PhotoCaptureDelegate] Image created successfully, size: \(image.size)")
         completion(.success(image))
+    }
+    
+    func photoOutput(_ output: AVCapturePhotoOutput, willCapturePhotoFor settings: AVCapturePhotoSettings) {
+        print("📸 [PhotoCaptureDelegate] willCapturePhotoFor called")
+    }
+    
+    func photoOutput(_ output: AVCapturePhotoOutput, didCapturePhotoFor settings: AVCapturePhotoSettings) {
+        print("📸 [PhotoCaptureDelegate] didCapturePhotoFor called")
     }
 }
 

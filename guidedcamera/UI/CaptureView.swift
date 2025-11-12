@@ -150,24 +150,34 @@ struct CaptureView: View {
     }
     
     private func capture() {
-        guard let step = session.currentStep else { return }
+        print("📸 [CaptureView] Capture button tapped")
+        guard let step = session.currentStep else {
+            print("❌ [CaptureView] No current step")
+            return
+        }
         
+        print("📸 [CaptureView] Starting capture for step: \(step.id)")
         isCapturing = true
         validationMessage = nil
         
         let sessionId = session.state.workflowPlan?.planId ?? "session"
         let stepId = step.id
         
+        print("📸 [CaptureView] Calling captureManager.capturePhoto...")
         captureManager.capturePhoto(sessionId: sessionId, stepId: stepId) { [weak session] (result: Result<CapturedMedia, Error>) in
+            print("📸 [CaptureView] Capture completion called")
             DispatchQueue.main.async {
                 isCapturing = false
                 
                 switch result {
                 case .success(let media):
+                    print("✅ [CaptureView] Photo captured successfully: \(media.fileURL.path)")
                     session?.addMedia(media)
+                    print("📸 [CaptureView] Starting validation...")
                     validateCapture(media: media, step: step)
                     
                 case .failure(let error):
+                    print("❌ [CaptureView] Capture failed: \(error)")
                     validationMessage = "Capture failed: \(error.localizedDescription)"
                 }
             }
@@ -175,12 +185,14 @@ struct CaptureView: View {
     }
     
     private func validateCapture(media: CapturedMedia, step: WorkflowStep) {
+        print("🔍 [CaptureView] Starting validation for captured media")
         isValidating = true
         
         Task {
             // Load image for validation
-            guard let imageData = try? Data(contentsOf: media.fileURL),
-                  let image = UIImage(data: imageData) else {
+            print("🔍 [CaptureView] Loading image from: \(media.fileURL.path)")
+            guard let imageData = try? Data(contentsOf: media.fileURL) else {
+                print("❌ [CaptureView] Failed to load image data")
                 await MainActor.run {
                     isValidating = false
                     validationMessage = "Failed to load image for validation"
@@ -188,32 +200,50 @@ struct CaptureView: View {
                 return
             }
             
+            guard let image = UIImage(data: imageData) else {
+                print("❌ [CaptureView] Failed to create UIImage from data")
+                await MainActor.run {
+                    isValidating = false
+                    validationMessage = "Failed to load image for validation"
+                }
+                return
+            }
+            
+            print("✅ [CaptureView] Image loaded, size: \(image.size)")
+            print("🔍 [CaptureView] Running validators: \(step.validators.count) validators")
+            
             // Run quality validators
             let qualityResult = await QualityValidator.shared.validate(image, against: step.validators)
+            print("🔍 [CaptureView] Quality validation result: \(qualityResult.passed)")
             
             // Run scene validators
             let sceneResult = await SceneValidator.shared.validate(image, against: step.validators)
+            print("🔍 [CaptureView] Scene validation result: \(sceneResult.passed)")
             
             await MainActor.run {
                 isValidating = false
                 
                 if qualityResult.passed && sceneResult.passed {
+                    print("✅ [CaptureView] All validations passed, moving to next step")
                     validationMessage = "✓ Validation passed"
                     guidanceCoordinator.provideFeedback(success: true)
                     
                     // Move to next step after a delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        print("➡️ [CaptureView] Transitioning to next step")
                         session.nextStep()
                         if let nextStep = session.currentStep {
+                            print("✅ [CaptureView] Next step: \(nextStep.id)")
                             guidanceCoordinator.provideGuidance(for: nextStep)
                         } else {
-                            // Session complete
+                            print("✅ [CaptureView] Session complete!")
                             session.complete()
                             dismiss()
                         }
                     }
                 } else {
                     let errors = qualityResult.errors + sceneResult.errors
+                    print("❌ [CaptureView] Validation failed: \(errors)")
                     validationMessage = errors.joined(separator: ", ")
                     guidanceCoordinator.provideFeedback(success: false, errors: errors)
                 }

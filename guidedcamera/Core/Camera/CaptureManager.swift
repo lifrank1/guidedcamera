@@ -29,13 +29,23 @@ class CaptureManager: ObservableObject {
     
     /// Capture a photo
     func capturePhoto(sessionId: String, stepId: String, completion: @escaping (Result<CapturedMedia, Error>) -> Void) {
+        print("📸 [CaptureManager] capturePhoto called for step: \(stepId)")
+        print("📸 [CaptureManager] Camera session running: \(cameraController.isSessionRunning)")
+        
         cameraController.capturePhoto { [weak self] result in
-            guard let self = self else { return }
+            guard let self = self else {
+                print("❌ [CaptureManager] Self is nil in capture completion")
+                return
+            }
+            
+            print("📸 [CaptureManager] Camera capture result received")
             
             switch result {
             case .success(let image):
+                print("✅ [CaptureManager] Image captured, size: \(image.size)")
                 do {
                     let fileURL = try self.mediaStore.savePhoto(image, for: sessionId, stepId: stepId)
+                    print("✅ [CaptureManager] Image saved to: \(fileURL.path)")
                     
                     var metadata = MediaMetadata()
                     metadata.deviceInfo = UIDevice.current.model
@@ -56,11 +66,14 @@ class CaptureManager: ObservableObject {
                         metadata: metadata
                     )
                     
+                    print("✅ [CaptureManager] Calling completion with success")
                     completion(.success(media))
                 } catch {
+                    print("❌ [CaptureManager] Failed to save image: \(error)")
                     completion(.failure(error))
                 }
             case .failure(let error):
+                print("❌ [CaptureManager] Camera capture failed: \(error)")
                 completion(.failure(error))
             }
         }
