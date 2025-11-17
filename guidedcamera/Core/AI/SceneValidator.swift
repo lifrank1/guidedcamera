@@ -12,7 +12,7 @@ import UIKit
 class SceneValidator {
     static let shared = SceneValidator()
     
-    private let visionAnalyzer = VisionAnalyzer.shared
+    private let yoloAnalyzer = YOLOAnalyzer.shared
     
     private init() {}
     
@@ -21,16 +21,12 @@ class SceneValidator {
         var results: [String: Bool] = [:]
         var errors: [String] = []
         
-        // Analyze image first
-        let analysisResult = await withCheckedContinuation { continuation in
-            visionAnalyzer.analyzeImage(image) { result in
-                continuation.resume(returning: result)
-            }
-        }
+        // Detect objects using YOLO
+        let detectedObjects = await yoloAnalyzer.detectObjects(image, confidenceThreshold: 0.5)
         
-        guard case .success(let analysis) = analysisResult else {
-            return ValidationResult(passed: false, errors: ["Failed to analyze image"])
-        }
+        // Extract detected labels (normalize class names)
+        let detectedLabels = detectedObjects.map { COCOClasses.normalizeClassName($0.label) }
+        print("🔍 [SceneValidator] YOLO detected objects: \(detectedLabels)")
         
         for validator in validators {
             let passed: Bool
@@ -39,13 +35,19 @@ class SceneValidator {
             case "contains":
                 if let argsDict = validator.args,
                    let labelsAnyOf = extractLabelsAnyOf(from: argsDict) {
+                    // Normalize required labels
+                    let requiredNormalized = labelsAnyOf.map { COCOClasses.normalizeClassName($0) }
+                    
                     // Check if any of the required labels are detected
-                    let detectedLower = analysis.detectedObjects.map { $0.lowercased() }
-                    let requiredLower = labelsAnyOf.map { $0.lowercased() }
+                    let detectedLower = detectedLabels.map { $0.lowercased() }
+                    let requiredLower = requiredNormalized.map { $0.lowercased() }
                     passed = !Set(detectedLower).isDisjoint(with: Set(requiredLower))
                     
                     if !passed {
                         errors.append("Required objects not found: \(labelsAnyOf.joined(separator: ", "))")
+                        print("❌ [SceneValidator] Validation failed. Detected: \(detectedLabels), Required: \(requiredNormalized)")
+                    } else {
+                        print("✅ [SceneValidator] Validation passed. Found: \(Set(detectedLower).intersection(Set(requiredLower)))")
                     }
                 } else {
                     passed = true

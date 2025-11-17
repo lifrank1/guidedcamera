@@ -1,0 +1,13 @@
+workflow: Test Selfie and Hand
+steps:
+  - id: selfie
+    instruction: "Take a selfie. Make sure your face is clearly visible and centered in the frame."
+    capture: photo
+    overlays: ["grid"]
+    must_have: ["face"]
+  - id: hand
+    instruction: "Now take a photo of your hand. Hold it up to the camera with your palm facing forward."
+    capture: photo
+    overlays: ["grid"]
+    must_have: ["hand"]
+

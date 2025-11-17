@@ -96,7 +96,21 @@ enum TransitionCondition: String, Codable {
 
 /// Report template configuration
 struct ReportTemplate: Codable {
-    let template: String
+    let template: String?
+    
+    init(template: String? = nil) {
+        self.template = template
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Handle empty report object {} or missing template
+        template = try container.decodeIfPresent(String.self, forKey: .template)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case template
+    }
 }
 
 /// Helper for encoding/decoding Any values in JSON

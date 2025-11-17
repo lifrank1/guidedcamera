@@ -16,9 +16,15 @@ class CameraController: NSObject, ObservableObject {
     private let session = AVCaptureSession()
     private let photoOutput = AVCapturePhotoOutput()
     private let videoOutput = AVCaptureMovieFileOutput()
+    private let videoDataOutput = AVCaptureVideoDataOutput()
     private var videoFileURL: URL?
     // Retain photo capture delegates to prevent deallocation
     private var activePhotoDelegates: [PhotoCaptureDelegate] = []
+    
+    // Real-time detection support
+    weak var videoDataDelegate: AVCaptureVideoDataOutputSampleBufferDelegate?
+    private var frameCount = 0
+    private let frameSkipInterval = 10 // Process every 10th frame (~3 FPS on 30 FPS camera)
     
     // Preview layer is now managed by CameraPreviewUIView
     // This property is kept for compatibility but preview should be accessed via the view
@@ -30,6 +36,11 @@ class CameraController: NSObject, ObservableObject {
     
     var captureSession: AVCaptureSession {
         return session
+    }
+    
+    /// Enable/disable real-time detection
+    func setRealTimeDetectionEnabled(_ enabled: Bool) {
+        videoDataOutput.setSampleBufferDelegate(enabled ? self : nil, queue: enabled ? DispatchQueue.global(qos: .userInitiated) : nil)
     }
     
     override init() {
@@ -110,6 +121,16 @@ class CameraController: NSObject, ObservableObject {
             print("⚠️ [CameraController] Cannot add video output")
         }
         
+        // Add video data output for real-time detection
+        videoDataOutput.setSampleBufferDelegate(self, queue: DispatchQueue.global(qos: .userInitiated))
+        videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)]
+        if session.canAddOutput(videoDataOutput) {
+            session.addOutput(videoDataOutput)
+            print("✅ [CameraController] Video data output added for real-time detection")
+        } else {
+            print("⚠️ [CameraController] Cannot add video data output")
+        }
+        
         session.commitConfiguration()
         print("✅ [CameraController] Session configuration complete")
     }
@@ -187,6 +208,17 @@ class CameraController: NSObject, ObservableObject {
 extension CameraController: AVCaptureFileOutputRecordingDelegate {
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
         // Video recording finished
+    }
+}
+
+extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // Process every Nth frame for performance
+        frameCount += 1
+        guard frameCount % frameSkipInterval == 0 else { return }
+        
+        // Forward to delegate if set
+        videoDataDelegate?.captureOutput?(output, didOutput: sampleBuffer, from: connection)
     }
 }
 

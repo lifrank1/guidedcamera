@@ -128,7 +128,7 @@ class WorkflowLoader {
         }
         
         // Method 2: Try Bundle.main.url(forResource:withExtension:subdirectory:)
-        let knownWorkflows = ["home_inspection", "vehicle_accident", "contractor_daily"]
+        let knownWorkflows = ["home_inspection", "vehicle_accident", "contractor_daily", "test_selfie_hand"]
         var foundWorkflows: [String] = []
         
         for workflow in knownWorkflows {

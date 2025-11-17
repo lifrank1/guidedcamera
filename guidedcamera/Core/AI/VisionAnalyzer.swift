@@ -16,6 +16,8 @@ class VisionAnalyzer {
     private init() {}
     
     /// Analyze image for objects and scene content
+    /// @deprecated: Use YOLOAnalyzer for object detection instead
+    @available(*, deprecated, message: "Use YOLOAnalyzer.detectObjects() instead for better accuracy")
     func analyzeImage(_ image: UIImage, completion: @escaping (Result<VisionAnalysis, Error>) -> Void) {
         guard let cgImage = image.cgImage else {
             completion(.failure(VisionError.invalidImage))
@@ -67,8 +69,8 @@ class VisionAnalyzer {
         
         // Simplified sharpness calculation using Laplacian variance
         // In production, this would use more sophisticated algorithms
-        let ciImage = CIImage(cgImage: cgImage)
-        let context = CIContext()
+        _ = CIImage(cgImage: cgImage)
+        _ = CIContext()
         
         // This is a placeholder - real implementation would use Core Image filters
         // For now, return a default value

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 /// Full-screen camera interface with minimal UI
 struct CaptureView: View {
@@ -19,6 +20,9 @@ struct CaptureView: View {
     @State private var isCapturing = false
     @State private var isValidating = false
     @State private var validationMessage: String?
+    @State private var detectedObjects: [DetectedObject] = []
+    @State private var isRealTimeDetectionEnabled = true
+    @State private var detectionDelegate: RealTimeDetectionDelegate?
     
     var body: some View {
         ZStack {
@@ -30,7 +34,8 @@ struct CaptureView: View {
             if let step = session.currentStep {
                 VisualOverlayView(
                     overlays: step.ui.overlays,
-                    progress: session.progress
+                    progress: session.progress,
+                    detectedObjects: isRealTimeDetectionEnabled ? detectedObjects : nil
                 )
             }
             
@@ -113,6 +118,15 @@ struct CaptureView: View {
             print("📷 [CaptureView] View appeared, setting up session...")
             setupSession()
             
+            // Set up real-time detection delegate
+            detectionDelegate = RealTimeDetectionDelegate { objects in
+                DispatchQueue.main.async {
+                    detectedObjects = objects
+                }
+            }
+            captureManager.camera.videoDataDelegate = detectionDelegate
+            captureManager.camera.setRealTimeDetectionEnabled(isRealTimeDetectionEnabled)
+            
             // Start camera session after a brief delay to ensure view is laid out
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 print("📷 [CaptureView] Starting camera session...")
@@ -121,6 +135,7 @@ struct CaptureView: View {
         }
         .onDisappear {
             print("📷 [CaptureView] View disappeared, stopping camera session...")
+            captureManager.camera.setRealTimeDetectionEnabled(false)
             captureManager.camera.stopSession()
         }
     }
@@ -261,6 +276,35 @@ struct CaptureView: View {
     private func retryStep() {
         session.retryStep()
         validationMessage = nil
+    }
+}
+
+/// Delegate for real-time object detection from camera frames
+private class RealTimeDetectionDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    private let onDetection: ([DetectedObject]) -> Void
+    private let yoloAnalyzer = YOLOAnalyzer.shared
+    
+    init(onDetection: @escaping ([DetectedObject]) -> Void) {
+        self.onDetection = onDetection
+    }
+    
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return
+        }
+        
+        // Run YOLO detection on background queue
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            // Use lower confidence threshold for real-time (more detections)
+            let objects = self.yoloAnalyzer.detectObjectsRealTime(pixelBuffer, confidenceThreshold: 0.4)
+            
+            // Update on main queue
+            DispatchQueue.main.async {
+                self.onDetection(objects)
+            }
+        }
     }
 }
 
