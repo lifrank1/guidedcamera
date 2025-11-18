@@ -11,8 +11,14 @@ import UniformTypeIdentifiers
 /// Review captured media and annotations
 struct ReviewView: View {
     let session: CaptureSession
+    let onDismiss: (() -> Void)?
     @State private var showingShareSheet = false
     @State private var exportURL: URL?
+    
+    init(session: CaptureSession, onDismiss: (() -> Void)? = nil) {
+        self.session = session
+        self.onDismiss = onDismiss
+    }
     
     var body: some View {
         NavigationView {
@@ -36,6 +42,14 @@ struct ReviewView: View {
                 }
             }
             .navigationTitle("Review")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        onDismiss?()
+                    }
+                }
+            }
             .sheet(isPresented: $showingShareSheet) {
                 if let url = exportURL {
                     ShareSheet(activityItems: [url])

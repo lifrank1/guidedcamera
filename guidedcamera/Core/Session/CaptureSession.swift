@@ -29,36 +29,80 @@ class CaptureSession: ObservableObject {
     
     /// Get current step
     var currentStep: WorkflowStep? {
-        guard let plan = state.workflowPlan,
-              state.currentStepIndex < plan.steps.count else {
+        // If session is completed, don't return a step
+        guard state.state != .completed else {
+            print("🔍 [CaptureSession] currentStep: Session is completed, returning nil")
             return nil
         }
-        return plan.steps[state.currentStepIndex]
+        
+        guard let plan = state.workflowPlan else {
+            print("🔍 [CaptureSession] currentStep: No workflow plan")
+            return nil
+        }
+        print("🔍 [CaptureSession] currentStep: currentStepIndex=\(state.currentStepIndex), totalSteps=\(plan.steps.count), state=\(state.state)")
+        if state.currentStepIndex < plan.steps.count {
+            let step = plan.steps[state.currentStepIndex]
+            print("🔍 [CaptureSession] currentStep: Returning step '\(step.id)' at index \(state.currentStepIndex)")
+            return step
+        } else {
+            print("🔍 [CaptureSession] currentStep: Index \(state.currentStepIndex) >= totalSteps \(plan.steps.count), returning nil")
+            return nil
+        }
     }
     
     /// Move to next step
     func nextStep(transition: TransitionCondition = .onSuccess) {
-        guard let plan = state.workflowPlan,
-              let currentStep = currentStep else {
+        print("🔄 [CaptureSession] nextStep() called with transition: \(transition)")
+        guard let plan = state.workflowPlan else {
+            print("❌ [CaptureSession] nextStep: No workflow plan")
             return
         }
+        
+        print("🔄 [CaptureSession] nextStep: currentStepIndex=\(state.currentStepIndex), totalSteps=\(plan.steps.count)")
+        
+        guard let currentStep = currentStep else {
+            print("❌ [CaptureSession] nextStep: No current step (currentStepIndex=\(state.currentStepIndex))")
+            return
+        }
+        
+        print("🔄 [CaptureSession] nextStep: Current step is '\(currentStep.id)' at index \(state.currentStepIndex)")
+        print("🔄 [CaptureSession] nextStep: Current step has \(currentStep.transitions.count) transitions")
         
         // Find transition for the condition
         let transition = currentStep.transitions.first { $0.when == transition }
         let nextStepId = transition?.to
         
-        if let nextStepId = nextStepId,
-           let nextIndex = plan.steps.firstIndex(where: { $0.id == nextStepId }) {
-            state.currentStepIndex = nextIndex
+        if let nextStepId = nextStepId {
+            print("🔄 [CaptureSession] nextStep: Found transition to '\(nextStepId)'")
+            if let nextIndex = plan.steps.firstIndex(where: { $0.id == nextStepId }) {
+                print("🔄 [CaptureSession] nextStep: Transitioning to step '\(nextStepId)' at index \(nextIndex)")
+                state.currentStepIndex = nextIndex
+            } else {
+                print("⚠️ [CaptureSession] nextStep: Transition points to non-existent step '\(nextStepId)', using default behavior")
+                // Default: move to next step in sequence
+                if state.currentStepIndex < plan.steps.count - 1 {
+                    let newIndex = state.currentStepIndex + 1
+                    print("🔄 [CaptureSession] nextStep: Moving to next step in sequence: index \(newIndex)")
+                    state.currentStepIndex = newIndex
+                } else {
+                    print("✅ [CaptureSession] nextStep: Already at last step, completing session")
+                    complete()
+                }
+            }
         } else {
+            print("🔄 [CaptureSession] nextStep: No transition found for \(transition), using default behavior")
             // Default: move to next step in sequence
             if state.currentStepIndex < plan.steps.count - 1 {
-                state.currentStepIndex += 1
+                let newIndex = state.currentStepIndex + 1
+                print("🔄 [CaptureSession] nextStep: Moving to next step in sequence: index \(newIndex)")
+                state.currentStepIndex = newIndex
             } else {
+                print("✅ [CaptureSession] nextStep: Already at last step (index \(state.currentStepIndex) of \(plan.steps.count - 1)), completing session")
                 complete()
             }
         }
         
+        print("🔄 [CaptureSession] nextStep: After transition, currentStepIndex=\(state.currentStepIndex)")
         saveState()
     }
     
@@ -90,8 +134,14 @@ class CaptureSession: ObservableObject {
     
     /// Complete session
     func complete() {
+        print("✅ [CaptureSession] complete() called")
+        print("✅ [CaptureSession] complete: Current state=\(state.state), currentStepIndex=\(state.currentStepIndex)")
+        if let plan = state.workflowPlan {
+            print("✅ [CaptureSession] complete: Total steps=\(plan.steps.count)")
+        }
         state.state = .completed
         state.completedAt = Date()
+        print("✅ [CaptureSession] complete: Session marked as completed")
         saveState()
     }
     

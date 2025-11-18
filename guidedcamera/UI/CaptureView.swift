@@ -23,24 +23,34 @@ struct CaptureView: View {
     @State private var detectedObjects: [DetectedObject] = []
     @State private var isRealTimeDetectionEnabled = true
     @State private var detectionDelegate: RealTimeDetectionDelegate?
+    @State private var showReview = false
     
     var body: some View {
-        ZStack {
-            // Camera preview
-            CameraPreviewView(cameraController: captureManager.camera)
-                .ignoresSafeArea()
-            
-            // Visual overlays
-            if let step = session.currentStep {
-                VisualOverlayView(
-                    overlays: step.ui.overlays,
-                    progress: session.progress,
-                    detectedObjects: isRealTimeDetectionEnabled ? detectedObjects : nil
-                )
-            }
-            
-            // UI overlay
-            VStack {
+        Group {
+            if showReview {
+                // Show review view when session is complete
+                ReviewView(session: session) {
+                    // When review is dismissed, dismiss the capture view to return to setup
+                    dismiss()
+                }
+            } else {
+                // Show camera capture interface
+                ZStack {
+                    // Camera preview
+                    CameraPreviewView(cameraController: captureManager.camera)
+                        .ignoresSafeArea()
+                    
+                    // Visual overlays
+                    if let step = session.currentStep {
+                        VisualOverlayView(
+                            overlays: step.ui.overlays,
+                            progress: session.progress,
+                            detectedObjects: isRealTimeDetectionEnabled ? detectedObjects : nil
+                        )
+                    }
+                    
+                    // UI overlay
+                    VStack {
                 // Top bar
                 HStack {
                     Button("Close") {
@@ -113,6 +123,8 @@ struct CaptureView: View {
                 .padding()
                 .background(Color.black.opacity(0.3))
             }
+                }
+            }
         }
         .onAppear {
             print("📷 [CaptureView] View appeared, setting up session...")
@@ -135,8 +147,18 @@ struct CaptureView: View {
         }
         .onDisappear {
             print("📷 [CaptureView] View disappeared, stopping camera session...")
-            captureManager.camera.setRealTimeDetectionEnabled(false)
-            captureManager.camera.stopSession()
+            if !showReview {
+                captureManager.camera.setRealTimeDetectionEnabled(false)
+                captureManager.camera.stopSession()
+            }
+        }
+        .onChange(of: showReview) { newValue in
+            if newValue {
+                // Stop camera when showing review
+                print("📷 [CaptureView] Stopping camera for review")
+                captureManager.camera.setRealTimeDetectionEnabled(false)
+                captureManager.camera.stopSession()
+            }
         }
     }
     
@@ -240,20 +262,48 @@ struct CaptureView: View {
                 
                 if qualityResult.passed && sceneResult.passed {
                     print("✅ [CaptureView] All validations passed, moving to next step")
+                    print("🔍 [CaptureView] Current step before transition: \(step.id)")
+                    print("🔍 [CaptureView] Current stepIndex before transition: \(session.state.currentStepIndex)")
+                    if let plan = session.state.workflowPlan {
+                        print("🔍 [CaptureView] Total steps in plan: \(plan.steps.count)")
+                        print("🔍 [CaptureView] Step IDs: \(plan.steps.map { $0.id })")
+                    }
                     validationMessage = "✓ Validation passed"
                     guidanceCoordinator.provideFeedback(success: true)
                     
                     // Move to next step after a delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        print("➡️ [CaptureView] Transitioning to next step")
+                        print("➡️ [CaptureView] Transitioning to next step (after 1.5s delay)")
+                        print("🔍 [CaptureView] Before nextStep(): currentStepIndex=\(session.state.currentStepIndex)")
+                        print("🔍 [CaptureView] Before nextStep(): session.state=\(session.state.state)")
+                        print("🔍 [CaptureView] Before nextStep(): isComplete=\(session.isComplete)")
+                        
                         session.nextStep()
+                        
+                        print("🔍 [CaptureView] After nextStep(): currentStepIndex=\(session.state.currentStepIndex)")
+                        print("🔍 [CaptureView] After nextStep(): session.state=\(session.state.state)")
+                        print("🔍 [CaptureView] After nextStep(): isComplete=\(session.isComplete)")
+                        
                         if let nextStep = session.currentStep {
+                            print("⚠️ [CaptureView] WARNING: Still have a current step after nextStep(): '\(nextStep.id)'")
+                            print("⚠️ [CaptureView] This should not happen if we were on the last step!")
                             print("✅ [CaptureView] Next step: \(nextStep.id)")
                             guidanceCoordinator.provideGuidance(for: nextStep)
                         } else {
-                            print("✅ [CaptureView] Session complete!")
-                            session.complete()
-                            dismiss()
+                            print("✅ [CaptureView] No current step - session should be complete")
+                            print("🔍 [CaptureView] Session state: \(session.state.state)")
+                            print("🔍 [CaptureView] isComplete: \(session.isComplete)")
+                            
+                            // Ensure session is marked as complete
+                            if !session.isComplete {
+                                print("⚠️ [CaptureView] Session not marked complete, calling complete()")
+                                session.complete()
+                            }
+                            
+                            // Show review screen instead of dismissing
+                            print("📋 [CaptureView] Setting showReview = true")
+                            showReview = true
+                            print("📋 [CaptureView] showReview is now: \(showReview)")
                         }
                     }
                 } else {

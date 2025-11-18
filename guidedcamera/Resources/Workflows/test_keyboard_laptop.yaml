@@ -1,0 +1,13 @@
+workflow: Test Keyboard and Laptop
+steps:
+  - id: keyboard
+    instruction: "Take a photo of a keyboard. Make sure the keyboard is clearly visible and well-lit in the frame."
+    capture: photo
+    overlays: ["grid"]
+    must_have: ["keyboard"]
+  - id: laptop
+    instruction: "Now take a photo of a laptop. Position the laptop so the screen and keyboard area are visible."
+    capture: photo
+    overlays: ["grid"]
+    must_have: ["laptop"]
+
