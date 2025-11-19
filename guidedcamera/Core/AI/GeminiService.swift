@@ -267,6 +267,55 @@ class GeminiService {
         throw lastError ?? GeminiError.apiError("Request failed after \(maxRetries) attempts")
     }
     
+    /// Generate text using Gemini (for question generation, etc.)
+    func generateText(prompt: String) async throws -> [String] {
+        print("🤖 [GeminiService] Generating text with prompt length: \(prompt.count)")
+        
+        let url = URL(string: "\(baseURL)/models/gemini-2.5-flash:generateContent?key=\(apiKey)")!
+        
+        let requestBody: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt]
+                    ]
+                ]
+            ]
+        ]
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw GeminiError.apiError("HTTP error: \(errorBody)")
+        }
+        
+        guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let candidates = jsonResponse["candidates"] as? [[String: Any]],
+              let firstCandidate = candidates.first,
+              let content = firstCandidate["content"] as? [String: Any],
+              let parts = content["parts"] as? [[String: Any]],
+              let firstPart = parts.first,
+              let text = firstPart["text"] as? String else {
+            throw GeminiError.invalidResponse
+        }
+        
+        // Parse JSON array from response
+        let cleanedText = extractJSON(from: text)
+        guard let jsonData = cleanedText.data(using: .utf8),
+              let questions = try? JSONSerialization.jsonObject(with: jsonData) as? [String] else {
+            throw GeminiError.invalidResponse
+        }
+        
+        return questions
+    }
+    
     /// Extract JSON from text that may contain markdown code blocks
     private func extractJSON(from text: String) -> String {
         // Remove markdown code blocks if present

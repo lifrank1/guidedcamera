@@ -234,6 +234,57 @@ class AppleLanguageModelService {
         }
     }
     
+    /// Generate text using Apple's SystemLanguageModel (for question generation, etc.)
+    func generateText(prompt: String) async throws -> [String] {
+        print("🍎 [AppleLanguageModelService] Generating text with prompt length: \(prompt.count)")
+        
+        // Check model availability
+        let availability = await model.availability
+        guard case .available = availability else {
+            throw AppleLanguageModelError.unavailable("Model is not available")
+        }
+        
+        // Create a session with instructions for JSON array output
+        let instructions = """
+        You are an AI assistant helping with a guided camera workflow. Generate responses as JSON arrays when requested.
+        Always return valid JSON arrays, no markdown, no explanations, no preamble.
+        """
+        
+        let session = LanguageModelSession(instructions: instructions)
+        print("🍎 [AppleLanguageModelService] Created LanguageModelSession for text generation")
+        
+        // Use low temperature for consistent, structured output
+        let options = GenerationOptions(temperature: 0.1)
+        
+        // Generate response
+        let response = try await session.respond(to: prompt, options: options)
+        let text = response.content
+        
+        print("🍎 [AppleLanguageModelService] Generated text, length: \(text.count) characters")
+        print("🍎 [AppleLanguageModelService] Text preview: \(text.prefix(200))...")
+        
+        // Extract JSON array from response
+        let jsonString = extractJSON(from: text)
+        
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw AppleLanguageModelError.invalidResponse("Failed to convert text to data")
+        }
+        
+        // Parse as JSON array of strings
+        do {
+            let questions = try JSONDecoder().decode([String].self, from: jsonData)
+            print("✅ [AppleLanguageModelService] Successfully parsed \(questions.count) items")
+            return questions
+        } catch {
+            print("❌ [AppleLanguageModelService] Failed to parse JSON array: \(error)")
+            // If parsing fails, try to extract array manually
+            if let extracted = extractStringArray(from: jsonString) {
+                return extracted
+            }
+            throw AppleLanguageModelError.invalidResponse("Failed to parse JSON array: \(error.localizedDescription)")
+        }
+    }
+    
     /// Extract JSON from text that may contain markdown code blocks
     private func extractJSON(from text: String) -> String {
         // Remove markdown code blocks if present
@@ -250,6 +301,29 @@ class AppleLanguageModelService {
         }
         
         return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    /// Fallback: Extract string array from text that might not be valid JSON
+    private func extractStringArray(from text: String) -> [String]? {
+        // Try to find array-like content
+        if let startIndex = text.firstIndex(of: "["),
+           let endIndex = text.lastIndex(of: "]") {
+            let arrayContent = String(text[text.index(after: startIndex)..<endIndex])
+            // Simple extraction: look for quoted strings
+            let pattern = #""([^"]+)""#
+            let regex = try? NSRegularExpression(pattern: pattern, options: [])
+            let nsString = arrayContent as NSString
+            let matches = regex?.matches(in: arrayContent, options: [], range: NSRange(location: 0, length: nsString.length)) ?? []
+            
+            let items = matches.compactMap { match -> String? in
+                guard match.numberOfRanges > 1 else { return nil }
+                let range = match.range(at: 1)
+                return nsString.substring(with: range)
+            }
+            
+            return items.isEmpty ? nil : items
+        }
+        return nil
     }
 }
 
@@ -269,6 +343,13 @@ class AppleLanguageModelService {
         print("⚠️ [AppleLanguageModelService] FoundationModels not available (requires iOS 26+), falling back to GeminiService")
         // Fallback to GeminiService when FoundationModels is not available
         return try await GeminiService.shared.compileWorkflow(yamlContent)
+    }
+    
+    /// Generate text using Gemini as fallback
+    /// Falls back to GeminiService when FoundationModels is not available
+    func generateText(prompt: String) async throws -> [String] {
+        print("⚠️ [AppleLanguageModelService] FoundationModels not available (requires iOS 26+), falling back to GeminiService")
+        return try await GeminiService.shared.generateText(prompt: prompt)
     }
 }
 

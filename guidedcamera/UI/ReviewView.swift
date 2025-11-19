@@ -126,12 +126,30 @@ struct AnnotationRow: View {
     let annotation: Annotation
     
     var body: some View {
-        VStack(alignment: .leading) {
-            Text(annotation.type.rawValue.capitalized)
-                .font(.caption)
-                .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                // Icon based on annotation type
+                Image(systemName: annotation.type == .voice ? "mic.fill" : "note.text")
+                    .foregroundColor(annotation.type == .voice ? .blue : .gray)
+                    .font(.caption)
+                
+                Text(annotation.type.rawValue.capitalized)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text(annotation.createdAt, style: .time)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            
             Text(annotation.content)
+                .font(.body)
+                .foregroundColor(.primary)
+                .padding(.top, 2)
         }
+        .padding(.vertical, 4)
     }
 }
 
