@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Root compiled plan structure from Gemini transpilation
+/// Root compiled plan structure from YAML workflow compilation
 struct WorkflowPlan: Codable, Identifiable {
     let id: String
     let planId: String

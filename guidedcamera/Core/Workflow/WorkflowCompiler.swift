@@ -7,11 +7,15 @@
 
 import Foundation
 
-/// Compiles YAML workflows to JSON plans via Gemini API
+/// Compiles YAML workflows to JSON plans via Apple's on-device SystemLanguageModel
 class WorkflowCompiler {
     static let shared = WorkflowCompiler()
     
-    private let geminiService = GeminiService.shared
+    @available(iOS 26.0, *)
+    private var appleLanguageModelService: AppleLanguageModelService {
+        AppleLanguageModelService.shared
+    }
+    
     private let cache = WorkflowCache.shared
     private let validator = WorkflowValidator.shared
     
@@ -31,12 +35,31 @@ class WorkflowCompiler {
             return cached
         }
         
-        print("🔨 [WorkflowCompiler] No cached plan found, compiling via Gemini API...")
+        print("🔨 [WorkflowCompiler] No cached plan found, compiling via Apple Intelligence...")
         
-        // Compile via Gemini
+        // Compile via Apple Language Model (or fallback to Gemini if FoundationModels not available)
         do {
-            var plan = try await geminiService.compileWorkflow(yamlContent)
-            print("✅ [WorkflowCompiler] Gemini compilation successful")
+            var plan: WorkflowPlan
+            if #available(iOS 18.0, *) {
+                // AppleLanguageModelService will use FoundationModels if available (iOS 26+),
+                // otherwise falls back to GeminiService
+                if #available(iOS 26.0, *) {
+                    do {
+                        plan = try await appleLanguageModelService.compileWorkflow(yamlContent)
+                    } catch {
+                        // If FoundationModels API fails, fall back to Gemini
+                        print("⚠️ [WorkflowCompiler] FoundationModels failed, falling back to Gemini: \(error)")
+                        plan = try await GeminiService.shared.compileWorkflow(yamlContent)
+                    }
+                } else {
+                    // Fallback to Gemini on earlier versions
+                    print("🔨 [WorkflowCompiler] Using GeminiService (FoundationModels requires iOS 26+)")
+                    plan = try await GeminiService.shared.compileWorkflow(yamlContent)
+                }
+            } else {
+                throw WorkflowCompilerError.unsupportedVersion("iOS 18.0 or later is required")
+            }
+            print("✅ [WorkflowCompiler] Apple Intelligence compilation successful")
             print("✅ [WorkflowCompiler] Plan ID: \(plan.planId)")
             print("✅ [WorkflowCompiler] Steps count: \(plan.steps.count)")
             
@@ -66,6 +89,17 @@ class WorkflowCompiler {
             print("❌ [WorkflowCompiler] Compilation failed: \(error)")
             print("❌ [WorkflowCompiler] Error details: \(error.localizedDescription)")
             throw error
+        }
+    }
+}
+
+enum WorkflowCompilerError: LocalizedError {
+    case unsupportedVersion(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedVersion(let message):
+            return message
         }
     }
 }

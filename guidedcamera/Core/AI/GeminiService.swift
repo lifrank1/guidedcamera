@@ -8,6 +8,8 @@
 import Foundation
 
 /// Service for interacting with Gemini API
+/// @deprecated Use AppleLanguageModelService instead for on-device compilation
+@available(*, deprecated, message: "Use AppleLanguageModelService for on-device compilation with Apple Intelligence")
 class GeminiService {
     static let shared = GeminiService()
     
