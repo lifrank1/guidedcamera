@@ -131,54 +131,12 @@ class AppleLanguageModelService {
             
             // Generate a response using the session
             // According to FoundationModels documentation: session.respond(to: prompt)
-            // The response is LanguageModelSession.Response<String>, which is the string itself
+            // Returns LanguageModelSession.Response<String> which has a .content property
             let response = try await session.respond(to: prompt)
             print("🍎 [AppleLanguageModelService] Received response from model")
             
-            // Extract text from LanguageModelSession.Response<String>
-            // According to FoundationModels API documentation, Response<String> should contain the string
-            // The response type wraps the string - try different access patterns
-            let text: String
-            
-            // Pattern 1: Response<String> might be ExpressibleByStringLiteral or have a stringValue
-            // Pattern 2: It might have a property like .content, .value, or the response itself
-            // Pattern 3: It might conform to StringProtocol
-            
-            // Try casting directly first (if Response<String> is a typealias for String)
-            if let directString = response as? String {
-                text = directString
-            } else {
-                // Use reflection to find the string value
-                let mirror = Mirror(reflecting: response)
-                
-                // Look through all children for a String value
-                var extractedString: String? = nil
-                for child in mirror.children {
-                    if let stringValue = child.value as? String {
-                        extractedString = stringValue
-                        break
-                    }
-                    // Also check nested structures
-                    let childMirror = Mirror(reflecting: child.value)
-                    for nestedChild in childMirror.children {
-                        if let nestedString = nestedChild.value as? String {
-                            extractedString = nestedString
-                            break
-                        }
-                    }
-                    if extractedString != nil { break }
-                }
-                
-                // If we found a string via reflection, use it
-                // Otherwise, convert the whole response to string
-                if let found = extractedString {
-                    text = found
-                } else {
-                    // Last resort: string description
-                    text = String(describing: response)
-                }
-            }
-            
+            // Extract text from the response - Response<String> has a .content property
+            let text = response.content
             print("🍎 [AppleLanguageModelService] Successfully extracted text from response")
             
             print("🍎 [AppleLanguageModelService] Extracted text from response, length: \(text.count) characters")
