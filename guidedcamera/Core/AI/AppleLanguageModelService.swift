@@ -129,10 +129,16 @@ class AppleLanguageModelService {
             let session = LanguageModelSession(instructions: instructions)
             print("🍎 [AppleLanguageModelService] Created LanguageModelSession")
             
-            // Generate a response using the session
-            // According to FoundationModels documentation: session.respond(to: prompt)
+            // Configure generation options for structured JSON output
+            // Temperature controls randomness: lower = more deterministic, higher = more creative
+            // For YAML-to-JSON compilation, we want low temperature (0.0-0.3) for consistent, structured output
+            // This ensures the model produces reliable JSON that matches the expected schema
+            let options = GenerationOptions(temperature: 0.1)
+            
+            // Generate a response using the session with generation options
+            // According to FoundationModels documentation: session.respond(to:options:)
             // Returns LanguageModelSession.Response<String> which has a .content property
-            let response = try await session.respond(to: prompt)
+            let response = try await session.respond(to: prompt, options: options)
             print("🍎 [AppleLanguageModelService] Received response from model")
             
             // Extract text from the response - Response<String> has a .content property
