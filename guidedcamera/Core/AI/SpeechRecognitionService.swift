@@ -168,6 +168,72 @@ class SpeechRecognitionService: ObservableObject {
         print("✅ [SpeechRecognitionService] Started real-time transcription")
     }
     
+    /// Pause real-time transcription (temporarily, can be resumed)
+    func pauseRealTimeTranscription() {
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        print("⏸️ [SpeechRecognitionService] Paused real-time transcription")
+    }
+    
+    /// Resume real-time transcription after pause
+    func resumeRealTimeTranscription() throws {
+        guard let recognizer = recognizer, recognizer.isAvailable else {
+            throw SpeechRecognitionError.notAvailable
+        }
+        
+        guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
+            throw SpeechRecognitionError.notAuthorized
+        }
+        
+        // Ensure audio engine is still running
+        if !audioEngine.isRunning {
+            audioEngine.prepare()
+            try audioEngine.start()
+            print("▶️ [SpeechRecognitionService] Restarted audio engine")
+        }
+        
+        // Create new recognition request
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        recognitionRequest = request
+        request.shouldReportPartialResults = true
+        
+        // Reinstall tap on input node
+        let inputNode = audioEngine.inputNode
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+        
+        // Start recognition task
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ [SpeechRecognitionService] Real-time recognition error: \(error.localizedDescription)")
+                Task { @MainActor in
+                    self.isTranscribing = false
+                }
+                return
+            }
+            
+            if let result = result {
+                Task { @MainActor in
+                    let text = result.bestTranscription.formattedString
+                    self.currentTranscription = text
+                    self.transcriptionText = text
+                    
+                    if result.isFinal {
+                        print("✅ [SpeechRecognitionService] Final transcription: \(text)")
+                    }
+                }
+            }
+        }
+        
+        isTranscribing = true
+        print("▶️ [SpeechRecognitionService] Resumed real-time transcription")
+    }
+    
     /// Stop real-time transcription
     func stopRealTimeTranscription() {
         audioEngine.stop()

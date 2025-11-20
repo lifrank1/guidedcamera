@@ -15,6 +15,7 @@ struct CaptureView: View {
     
     @StateObject private var session = CaptureSession()
     @StateObject private var captureManager = CaptureManager.shared
+    @StateObject private var voiceEngine = VoiceGuidanceEngine.shared
     private let guidanceCoordinator = GuidanceCoordinator.shared
     
     @State private var isCapturing = false
@@ -297,6 +298,23 @@ struct CaptureView: View {
             // Mark new step start for audio segmentation
             if let step = session.currentStep {
                 audioManager.markStepStart(step.id)
+            }
+        }
+        .onChange(of: voiceEngine.isSpeaking) { isSpeaking in
+            // Pause transcription when TTS is speaking to avoid picking up AI voice
+            if isSpeaking {
+                speechService.pauseRealTimeTranscription()
+                print("⏸️ [CaptureView] Paused transcription - TTS is speaking")
+            } else {
+                // Resume transcription after TTS finishes
+                Task {
+                    do {
+                        try speechService.resumeRealTimeTranscription()
+                        print("▶️ [CaptureView] Resumed transcription - TTS finished")
+                    } catch {
+                        print("⚠️ [CaptureView] Failed to resume transcription: \(error)")
+                    }
+                }
             }
         }
     }

@@ -25,10 +25,10 @@ class GuidanceCoordinator {
     /// Provide feedback after validation
     func provideFeedback(success: Bool, errors: [String] = []) {
         if success {
-            voiceEngine.speak("Great! That looks good. Moving to the next step.")
+            voiceEngine.speak("Moving on.")
         } else {
             let errorMessage = errors.isEmpty ? "Please try again." : errors.joined(separator: ". ")
-            voiceEngine.speak("There's an issue: \(errorMessage)")
+            voiceEngine.speak("\(errorMessage)")
         }
     }
     
