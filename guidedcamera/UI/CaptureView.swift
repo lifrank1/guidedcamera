@@ -33,6 +33,20 @@ struct CaptureView: View {
     @State private var contextualQuestions: [String] = []
     @State private var lastCapturedMedia: CapturedMedia?
     
+    // Computed property for flash icon
+    private var flashIconName: String {
+        switch captureManager.camera.flashMode {
+        case .off:
+            return "bolt.slash"
+        case .auto:
+            return "bolt.badge.a"
+        case .on:
+            return "bolt.fill"
+        @unknown default:
+            return "bolt.slash"
+        }
+    }
+    
     var body: some View {
         Group {
             if showReview {
@@ -74,17 +88,45 @@ struct CaptureView: View {
                             
                             Spacer()
                             
-                            if session.currentStep != nil {
-                                Text("\(session.state.currentStepIndex + 1)/\(session.state.workflowPlan?.steps.count ?? 0)")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(Color.black.opacity(0.4))
-                                    .cornerRadius(12)
-                                    .padding(.trailing, 16)
-                                    .padding(.top, 8)
+                            // Camera controls
+                            HStack(spacing: 16) {
+                                // Flash button
+                                Button(action: {
+                                    captureManager.camera.toggleFlash()
+                                }) {
+                                    Image(systemName: flashIconName)
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.9))
+                                        .padding(10)
+                                        .background(Color.black.opacity(0.4))
+                                        .clipShape(Circle())
+                                }
+                                
+                                // Camera flip button
+                                Button(action: {
+                                    captureManager.camera.switchCamera()
+                                }) {
+                                    Image(systemName: "camera.rotate")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.9))
+                                        .padding(10)
+                                        .background(Color.black.opacity(0.4))
+                                        .clipShape(Circle())
+                                }
+                                
+                                // Step counter
+                                if session.currentStep != nil {
+                                    Text("\(session.state.currentStepIndex + 1)/\(session.state.workflowPlan?.steps.count ?? 0)")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(Color.black.opacity(0.4))
+                                        .cornerRadius(12)
+                                }
                             }
+                            .padding(.trailing, 16)
+                            .padding(.top, 8)
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
                         

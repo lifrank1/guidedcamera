@@ -12,12 +12,17 @@ import UIKit
 class CameraController: NSObject, ObservableObject {
     @Published var isSessionRunning = false
     @Published var error: CameraError?
+    @Published var cameraPosition: AVCaptureDevice.Position = .back
+    @Published var flashMode: AVCaptureDevice.FlashMode = .off
     
     private let session = AVCaptureSession()
     private let photoOutput = AVCapturePhotoOutput()
     private let videoOutput = AVCaptureMovieFileOutput()
     private let videoDataOutput = AVCaptureVideoDataOutput()
     private var videoFileURL: URL?
+    private var currentVideoInput: AVCaptureDeviceInput?
+    private var currentVideoDevice: AVCaptureDevice?
+    
     // Retain photo capture delegates to prevent deallocation
     private var activePhotoDelegates: [PhotoCaptureDelegate] = []
     
@@ -79,19 +84,22 @@ class CameraController: NSObject, ObservableObject {
             session.removeInput(input)
         }
         
-        // Add video input
-        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+        // Add video input with current position
+        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: cameraPosition) else {
             print("❌ [CameraController] No video device found")
             error = .setupFailed
             session.commitConfiguration()
             return
         }
         
+        currentVideoDevice = videoDevice
+        
         do {
             let videoInput = try AVCaptureDeviceInput(device: videoDevice)
             if session.canAddInput(videoInput) {
                 session.addInput(videoInput)
-                print("✅ [CameraController] Video input added")
+                currentVideoInput = videoInput
+                print("✅ [CameraController] Video input added (position: \(cameraPosition == .back ? "back" : "front"))")
             } else {
                 print("❌ [CameraController] Cannot add video input")
                 error = .setupFailed
@@ -175,6 +183,11 @@ class CameraController: NSObject, ObservableObject {
         }
         
         let settings = AVCapturePhotoSettings()
+        // Configure flash mode
+        if photoOutput.supportedFlashModes.contains(flashMode) {
+            settings.flashMode = flashMode
+            print("📸 [CameraController] Flash mode set to: \(flashMode == .on ? "on" : flashMode == .auto ? "auto" : "off")")
+        }
         print("📸 [CameraController] Creating photo settings and starting capture...")
         let delegate = PhotoCaptureDelegate(completion: completion)
         // Retain delegate to prevent deallocation before capture completes
@@ -186,6 +199,64 @@ class CameraController: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
             self?.activePhotoDelegates.removeAll { $0 === delegate }
         }
+    }
+    
+    /// Switch between front and back camera
+    func switchCamera() {
+        let newPosition: AVCaptureDevice.Position = cameraPosition == .back ? .front : .back
+        
+        guard let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition) else {
+            print("❌ [CameraController] Cannot find camera at position: \(newPosition == .back ? "back" : "front")")
+            return
+        }
+        
+        session.beginConfiguration()
+        
+        // Remove current input
+        if let currentInput = currentVideoInput {
+            session.removeInput(currentInput)
+        }
+        
+        // Add new input
+        do {
+            let newInput = try AVCaptureDeviceInput(device: newDevice)
+            if session.canAddInput(newInput) {
+                session.addInput(newInput)
+                currentVideoInput = newInput
+                currentVideoDevice = newDevice
+                cameraPosition = newPosition
+                print("✅ [CameraController] Switched to \(newPosition == .back ? "back" : "front") camera")
+            } else {
+                print("❌ [CameraController] Cannot add new video input")
+                // Try to restore old input
+                if let oldInput = currentVideoInput {
+                    session.addInput(oldInput)
+                }
+            }
+        } catch {
+            print("❌ [CameraController] Failed to create new video input: \(error)")
+            // Try to restore old input
+            if let oldInput = currentVideoInput {
+                session.addInput(oldInput)
+            }
+        }
+        
+        session.commitConfiguration()
+    }
+    
+    /// Toggle flash mode: off -> auto -> on -> off
+    func toggleFlash() {
+        switch flashMode {
+        case .off:
+            flashMode = .auto
+        case .auto:
+            flashMode = .on
+        case .on:
+            flashMode = .off
+        @unknown default:
+            flashMode = .off
+        }
+        print("📸 [CameraController] Flash mode toggled to: \(flashMode == .on ? "on" : flashMode == .auto ? "auto" : "off")")
     }
     
     func startVideoRecording() throws -> URL {
