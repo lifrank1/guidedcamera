@@ -11,7 +11,17 @@ import SwiftUI
 struct guidedcameraApp: App {
     var body: some Scene {
         WindowGroup {
-            SetupView()
+            TabView {
+                CaptureTabView()
+                    .tabItem {
+                        Label("Capture", systemImage: "camera.fill")
+                    }
+                
+                ReportsView()
+                    .tabItem {
+                        Label("Reports", systemImage: "doc.text.fill")
+                    }
+            }
         }
     }
 }

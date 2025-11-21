@@ -6,14 +6,11 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Review captured media and annotations
 struct ReviewView: View {
     let session: CaptureSession
     let onDismiss: (() -> Void)?
-    @State private var showingShareSheet = false
-    @State private var exportURL: URL?
     
     init(session: CaptureSession, onDismiss: (() -> Void)? = nil) {
         self.session = session
@@ -22,144 +19,269 @@ struct ReviewView: View {
     
     var body: some View {
         NavigationView {
-            List {
-                Section("Captured Media") {
-                    ForEach(session.state.capturedMedia) { media in
-                        MediaRow(media: media)
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Success header
+                    successHeader
+                    
+                    // Summary cards
+                    summarySection
+                    
+                    // Captured media grid
+                    if !session.state.capturedMedia.isEmpty {
+                        mediaSection
+                    }
+                    
+                    // Annotations
+                    if !session.state.annotations.isEmpty {
+                        annotationsSection
                     }
                 }
-                
-                Section("Annotations") {
-                    ForEach(session.state.annotations) { annotation in
-                        AnnotationRow(annotation: annotation)
-                    }
-                }
-                
-                Section {
-                    Button("Export Session") {
-                        exportSession()
-                    }
-                }
+                .padding()
             }
-            .navigationTitle("Review")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle("Workflow Complete")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         onDismiss?()
                     }
-                }
-            }
-            .sheet(isPresented: $showingShareSheet) {
-                if let url = exportURL {
-                    ShareSheet(activityItems: [url])
+                    .fontWeight(.semibold)
                 }
             }
         }
     }
     
-    private func exportSession() {
-        Task {
-            do {
-                let url = try await createExportPackage()
-                await MainActor.run {
-                    exportURL = url
-                    showingShareSheet = true
-                }
-            } catch {
-                print("Export failed: \(error)")
+    private var successHeader: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.green)
+            
+            Text("All Steps Completed")
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            if let workflowName = session.state.workflowPlan?.planId {
+                Text(workflowName)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+    }
+    
+    private var summarySection: some View {
+        HStack(spacing: 16) {
+            ReviewSummaryCard(
+                title: "Photos",
+                value: "\(session.state.capturedMedia.count)",
+                icon: "photo.fill",
+                color: .blue
+            )
+            
+            ReviewSummaryCard(
+                title: "Annotations",
+                value: "\(session.state.annotations.count)",
+                icon: "note.text",
+                color: .purple
+            )
+            
+            if let plan = session.state.workflowPlan {
+                ReviewSummaryCard(
+                    title: "Steps",
+                    value: "\(plan.steps.count)",
+                    icon: "list.number",
+                    color: .orange
+                )
             }
         }
     }
     
-    private func createExportPackage() async throws -> URL {
-        let fileManager = FileManager.default
-        let tempDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        
-        // Copy media files
-        let mediaDir = tempDir.appendingPathComponent("media", isDirectory: true)
-        try fileManager.createDirectory(at: mediaDir, withIntermediateDirectories: true)
-        
-        for media in session.state.capturedMedia {
-            let destination = mediaDir.appendingPathComponent(media.fileURL.lastPathComponent)
-            try fileManager.copyItem(at: media.fileURL, to: destination)
+    private var mediaSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Captured Media")
+                .font(.headline)
+                .padding(.horizontal, 4)
+            
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12)
+            ], spacing: 12) {
+                ForEach(session.state.capturedMedia) { media in
+                    MediaThumbnailCard(media: media)
+                }
+            }
         }
-        
-        // Create annotations.json
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = .prettyPrinted
-        let annotationsData = try encoder.encode(session.state.annotations)
-        let annotationsURL = tempDir.appendingPathComponent("annotations.json")
-        try annotationsData.write(to: annotationsURL)
-        
-        // Create zip file
-        let zipURL = fileManager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).zip")
-        try ZipUtility.createZip(from: tempDir, to: zipURL)
-        
-        // Clean up temp directory
-        try? fileManager.removeItem(at: tempDir)
-        
-        return zipURL
+    }
+    
+    private var annotationsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Annotations")
+                .font(.headline)
+                .padding(.horizontal, 4)
+            
+            // Group annotations by step
+            let groupedAnnotations = Dictionary(grouping: session.state.annotations) { $0.stepId }
+            
+            ForEach(Array(groupedAnnotations.keys.sorted()), id: \.self) { stepId in
+                if let annotations = groupedAnnotations[stepId] {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Step: \(stepId)")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                        
+                        ForEach(annotations) { annotation in
+                            ReviewAnnotationCard(annotation: annotation)
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                }
+            }
+        }
     }
 }
 
-struct MediaRow: View {
-    let media: CapturedMedia
+/// Summary card component for ReviewView
+struct ReviewSummaryCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
     
     var body: some View {
-        HStack {
-            if media.type == .photo {
-                Image(systemName: "photo")
-            } else {
-                Image(systemName: "video")
-            }
-            Text(media.stepId)
-            Spacer()
-            Text(media.capturedAt, style: .time)
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(color)
+            
+            Text(value)
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
 }
 
-struct AnnotationRow: View {
-    let annotation: Annotation
+/// Media thumbnail card component
+struct MediaThumbnailCard: View {
+    let media: CapturedMedia
+    @State private var image: UIImage?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                // Icon based on annotation type
-                Image(systemName: annotation.type == .voice ? "mic.fill" : "note.text")
-                    .foregroundColor(annotation.type == .voice ? .blue : .gray)
+            Group {
+                if let image = image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 120)
+                        .clipped()
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(.tertiarySystemFill))
+                        .frame(height: 120)
+                        .overlay(
+                            ProgressView()
+                        )
+                }
+            }
+            .cornerRadius(8)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(media.stepId)
                     .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
                 
-                Text(annotation.type.rawValue.capitalized)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Text(annotation.createdAt, style: .time)
+                Text(media.capturedAt, style: .time)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
-            
-            Text(annotation.content)
-                .font(.body)
-                .foregroundColor(.primary)
-                .padding(.top, 2)
+            .padding(.horizontal, 4)
         }
-        .padding(.vertical, 4)
+        .onAppear {
+            loadImage()
+        }
+    }
+    
+    private func loadImage() {
+        guard let imageData = try? Data(contentsOf: media.fileURL),
+              let loadedImage = UIImage(data: imageData) else {
+            return
+        }
+        image = loadedImage
     }
 }
 
-struct ShareSheet: UIViewControllerRepresentable {
-    let activityItems: [Any]
+/// Annotation card component for ReviewView
+struct ReviewAnnotationCard: View {
+    let annotation: Annotation
     
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: annotationIcon)
+                .foregroundColor(annotationColor)
+                .font(.body)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(annotation.type.rawValue.capitalized)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(annotation.createdAt, style: .time)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                Text(annotation.content)
+                    .font(.body)
+                    .foregroundColor(.primary)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(8)
     }
     
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    private var annotationIcon: String {
+        switch annotation.type {
+        case .voice:
+            return "mic.fill"
+        case .text:
+            return "note.text"
+        case .contextualQA:
+            return "questionmark.circle.fill"
+        }
+    }
+    
+    private var annotationColor: Color {
+        switch annotation.type {
+        case .voice:
+            return .blue
+        case .text:
+            return .gray
+        case .contextualQA:
+            return .green
+        }
+    }
 }
 

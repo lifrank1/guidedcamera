@@ -54,6 +54,7 @@ struct CaptureView: View {
                 // Show review view when session is complete
                 ReviewView(session: session) {
                     // When review is dismissed, dismiss the capture view to return to setup
+                    showReview = false
                     dismiss()
                 }
             } else {
@@ -662,7 +663,36 @@ struct CaptureView: View {
             if !session.isComplete {
                 session.complete()
             }
+            // Always generate and save report when workflow completes
+            generateAndSaveReport()
             showReview = true
+        }
+    }
+    
+    private func generateAndSaveReport() {
+        // Ensure session is marked as complete
+        if !session.isComplete {
+            session.complete()
+        }
+        
+        guard let workflowPlan = session.state.workflowPlan else {
+            print("⚠️ [CaptureView] Cannot generate report: no workflow plan")
+            return
+        }
+        
+        let workflowName = workflowPlan.planId
+        let report = ReportGenerator.shared.generateReport(
+            from: session.state,
+            workflowName: workflowName
+        )
+        
+        Task {
+            do {
+                try ReportManager.shared.saveReport(report)
+                print("✅ [CaptureView] Report generated and saved successfully for workflow: \(workflowName)")
+            } catch {
+                print("❌ [CaptureView] Failed to save report: \(error)")
+            }
         }
     }
 }

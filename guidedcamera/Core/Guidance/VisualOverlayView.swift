@@ -40,9 +40,6 @@ struct VisualOverlayView: View {
             if let objects = detectedObjects, !objects.isEmpty {
                 BoundingBoxOverlay(objects: objects)
             }
-            
-            // Progress indicator
-            ProgressOverlay(progress: progress)
         }
     }
 }
@@ -92,23 +89,6 @@ struct HorizonOverlay: View {
 struct RuleOfThirdsOverlay: View {
     var body: some View {
         GridOverlay()
-    }
-}
-
-struct ProgressOverlay: View {
-    let progress: Double
-    
-    var body: some View {
-        VStack {
-            Spacer()
-            HStack {
-                Spacer()
-                ProgressView(value: progress)
-                    .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                    .frame(width: 200)
-                    .padding()
-            }
-        }
     }
 }
 
